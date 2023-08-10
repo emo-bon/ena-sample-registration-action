@@ -1,0 +1,5 @@
+name: "<action>"
+description: "<description>"
+runs:
+  using: "docker"
+  image: "Dockerfile"

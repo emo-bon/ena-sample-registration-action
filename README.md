@@ -1,1 +1,0 @@
-# ena-sample-registration-action
