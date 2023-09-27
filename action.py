@@ -17,18 +17,19 @@ Endpoint = namedtuple("Endpoint", "username password dropbox query env")
 ENDPOINT_PRO = Endpoint(
     os.getenv("USERNAME"),
     os.getenv("PASSWORD"),
-    os.getenv("DROPBOX_PRO"),
-    os.getenv("QUERY_PRO"),
+    "<production_url>",  # TODO add actual URL
+    "https://www.ebi.ac.uk/ena/portal/api/search?result=sample&query=(sample_alias={alias})",
     "PRO"
 ) 
 
 ENDPOINT_DEV = Endpoint(
     os.getenv("USERNAME"),
     os.getenv("PASSWORD"),
-    os.getenv("DROPBOX_DEV"),
-    os.getenv("QUERY_DEV"),
+    "https://wwwdev.ebi.ac.uk/ena/submit/drop-box/submit/",
+    "https://wwwdev.ebi.ac.uk/ena/portal/api/search?result=sample&query=(sample_alias={alias})",
     "DEV"
 ) 
+
 
 def generate_ena_accession_numbers(smi, ref_code, endpoint):
     # TODO: replace github URLs with published rocrate urls in domain data.emobon.embrc.eu
@@ -37,12 +38,12 @@ def generate_ena_accession_numbers(smi, ref_code, endpoint):
     habitat = {"So": "sediment", "Wa": "water"}[smi.split("_")[2]]
     df_observatory = retrieve_metadata(
         "https://raw.githubusercontent.com/emo-bon/observatory-"
-        f"{observatory.lower()}-crate/main/logsheets/{habitat}_observatory.csv",
+        f"{observatory.lower()}-crate/main/logsheets-transformed/{habitat}_observatory.csv",
         smi
     )
     df_sampling = retrieve_metadata(
         "https://raw.githubusercontent.com/emo-bon/observatory-"
-        f"{observatory.lower()}-crate/main/logsheets/{habitat}_sampling.csv",
+        f"{observatory.lower()}-crate/main/logsheets-transformed/{habitat}_sampling.csv",
         smi,
         "source_mat_id"
     )
@@ -59,12 +60,13 @@ def generate_ena_accession_numbers(smi, ref_code, endpoint):
         ean_umbrella = df_governance["ENA_accession_number_umbrella"].iloc[0]
         return ean_sample, ean_project, ean_umbrella
 
+
 def retrieve_metadata(url, value, filter_column=None):
     try:
-        df = pd.read_csv(url)
+        df = pd.read_csv(url, dtype=object, keep_default_na=False)
         if filter_column:
             df = df[df[filter_column] == value]
-        assert df.shape[0] == 1
+        assert len(df) == 1
         return df
     except HTTPError as e:
         logger.error(f"HTTPError | Could not retrieve metadata for {value} ({url}) | {e}")
@@ -88,7 +90,7 @@ def get_sample_xml(smi, ref_code, habitat, df_observatory, df_sampling):
     title.text = smi
     sample_name = et.SubElement(sample, "SAMPLE_NAME")
     taxon_id = et.SubElement(sample_name, "TAXON_ID")
-    taxon_id.text = str(int(df_sampling["tax_id"].iloc[0])) # TODO: fix this in QC, should be int instead of float
+    taxon_id.text = str(df_sampling["tax_id"].iloc[0])
     scientific_name = et.SubElement(sample_name, "SCIENTIFIC_NAME")
     scientific_name.text = df_sampling["scientific_name"].iloc[0]
     sample_attributes = et.SubElement(sample, "SAMPLE_ATTRIBUTES")
@@ -98,8 +100,7 @@ def get_sample_xml(smi, ref_code, habitat, df_observatory, df_sampling):
     else:  # ERC000024
         add_attribute(sample_attributes, "ENA-CHECKLIST", "ERC000024")
     add_attribute(sample_attributes, "project name", str(df_observatory["project_name"].iloc[0]))
-    add_attribute(sample_attributes, "collection date", str("2020-01-01")) # TODO: fix this in QC
-    # add_attribute(sample_attributes, "collection date", str(df_sampling["collection_date"].iloc[0])) # TODO: fix this in QC
+    add_attribute(sample_attributes, "collection date", str(df_sampling["collection_date"].iloc[0]))
     add_attribute(sample_attributes, "geographic location (country and/or sea)", str(df_observatory["geo_loc_name"].iloc[0]))
     add_attribute(sample_attributes, "geographic location (latitude)", str(df_observatory["latitude"].iloc[0]), "DD")
     add_attribute(sample_attributes, "geographic location (longitude)", str(df_observatory["longitude"].iloc[0]), "DD")
@@ -141,20 +142,15 @@ def get_ean_from_ebi(smi, ref_code, sample, submission, endpoint):
     root = et.fromstring(response.content.decode())
     if root.attrib["success"] == "true":
         ean = root.find("SAMPLE").attrib["accession"] # TODO: was sample_ean
-        # ext_id_ean = root.find("SAMPLE").find("EXT_ID").attrib["accession"]
-        # submission_ean = root.find("SUBMISSION").attrib["accession"]
+        # TODO: ext_id_ean = root.find("SAMPLE").find("EXT_ID").attrib["accession"]
+        # TODO: submission_ean = root.find("SUBMISSION").attrib["accession"]
         return ean # TODO: decide which accession numbers to return
     else:
         try:
-            if endpoint.env == "PRO":
-                # TODO: test this block, as it is not available in DEV
-                url = expand(endpoint.query, alias=f'"{ref_code}"')
-                df = pd.read_csv(url, sep='\t')
-                assert df.shape[0] == 1
-                return df["sample_accession"].iloc[0]
-            else:
-                msg = root.find("MESSAGES").find("ERROR").text
-                return re.search(r'"ERS\d{8}"', msg)[0][1:-1] # TODO: dangerous
+            url = expand(endpoint.query, alias=f'"{ref_code}"')
+            df = pd.read_csv(url, sep='\t')
+            assert len(df) == 1
+            return df["sample_accession"].iloc[0]
         except Exception as e:
             logger.error(f"Exception | Could not register or retrieve ENA accession number for {smi} ({ref_code}) | {e}")
 
