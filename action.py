@@ -138,6 +138,10 @@ def get_sample_xml(smi, ref_code, habitat, df_measured, df_observatory, df_sampl
         if pd.isna(units): units = None
         if tag == "sequence quality check": value = "manual"  # TODO get this sorted out in QC
         if tag == "tidal stage" and value == "ebb_tide": value = "low"  # TODO get this sorted out in QC
+        if tag == "tidal stage" and value == "flood_tide": value = "high"  # TODO get this sorted out in QC
+        if tag == "tidal stage" and value == "low_tide": value = "low"  # TODO get this sorted out in QC
+        if tag == "tidal stage" and value == "high_tide": value = "high"  # TODO get this sorted out in QC
+        if tag == "tidal stage" and value == "no_tide": value = ""  # TODO get this sorted out in QC
         if not value in ("", "NA", "nan"):
             add_attribute(sample_attributes, tag, value, units)
 
