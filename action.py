@@ -1,4 +1,4 @@
-cimport logging
+import logging
 import os
 import pandas as pd
 import requests
@@ -66,7 +66,7 @@ def generate_ena_accession_numbers(smi, ref_code, df_run_info, endpoint):
     )
 
     df_governance = retrieve_metadata(
-        "https://raw.githubusercontent.com/emo-bon/governance-data/main/observatories.csv",
+        "https://raw.githubusercontent.com/emo-bon/governance-crate/main/observatories.csv",
         observatory,
         "EMOBON_observatory_id"
     )
